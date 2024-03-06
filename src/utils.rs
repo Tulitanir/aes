@@ -1,3 +1,8 @@
+use std::fs::File;
+use std::io::prelude::*;
+use rand::Rng;
+use md5;
+
 const SBOX: [u8; 256] = [
     0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76, 
     0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf, 0x9c, 0xa4, 0x72, 0xc0, 
@@ -47,7 +52,56 @@ const NR: usize = 10;
 const NB: usize = 4;
 const NK: usize = 4;
 
-pub fn encrypt(input_bytes: &[u8; 16], key: &[u8; 16]) -> [u8; 16] {
+pub fn encrypt_file(input_path: &str, key_word: &str, output_path: &str) {
+    let key = md5::compute(key_word);
+    let mut file = File::open(input_path).unwrap();
+    let mut buffer = [0u8; 16];
+
+    let mut encrypted_bytes: Vec<u8> = Vec::new();
+
+    loop {
+        let bytes_read = file.read(&mut buffer).unwrap();
+
+        if bytes_read < 16 {
+            let mut rng = rand::thread_rng();
+    
+            for i in bytes_read as usize..16 {
+                buffer[i] = rng.gen();
+            }
+
+            encrypted_bytes.append(&mut encrypt(&buffer, &key).to_vec());
+            break;
+        }
+
+        encrypted_bytes.append(&mut encrypt(&buffer, &key).to_vec());
+    }
+
+    let mut res = File::create(output_path).unwrap(); 
+    res.write_all(&encrypted_bytes).unwrap();
+}
+
+pub fn decrypt_file(input_path: &str, key_word: &str, output_path: &str) {
+    let key = md5::compute(key_word);
+    let mut file = File::open(input_path).unwrap();
+    let mut buffer = [0u8; 16];
+
+    let mut encrypted_bytes: Vec<u8> = Vec::new();
+
+    loop {
+        let bytes_read = file.read(&mut buffer).unwrap();
+
+        if bytes_read < 16 {
+            break;
+        }
+
+        encrypted_bytes.append(&mut decrypt(&buffer, &key).to_vec());
+    }
+
+    let mut res = File::create(output_path).unwrap(); 
+    res.write_all(&encrypted_bytes).unwrap();
+}
+
+fn encrypt(input_bytes: &[u8; 16], key: &[u8; 16]) -> [u8; 16] {
     let mut state = generate_state(input_bytes);
 
     let round_keys = key_expansion(key);
@@ -76,7 +130,7 @@ pub fn encrypt(input_bytes: &[u8; 16], key: &[u8; 16]) -> [u8; 16] {
     output
 }
 
-pub fn decrypt(input_bytes: &[u8; 16], key: &[u8; 16]) -> [u8; 16] {
+fn decrypt(input_bytes: &[u8; 16], key: &[u8; 16]) -> [u8; 16] {
     let mut state = generate_state(input_bytes);
 
     let round_keys = key_expansion(key);
